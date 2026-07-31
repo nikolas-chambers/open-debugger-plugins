@@ -1,0 +1,3 @@
+[submodule "external/open-debugger-plugins_sdk"]
+	path = external/open-debugger-plugins_sdk
+	url = https://github.com/nikolas-chambers/open-debugger-plugins_sdk
