@@ -1,0 +1,80 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  VERSION: 1.0.0
+
+# A plugin DLL links against odbg.exe's import library, so the host has to be
+# built first. We check open-debugger out next door, build just its odbg target
+# for this arch/config, then build this repo's plugins against it - exactly the
+# standalone flow a plugin author follows locally.
+jobs:
+  build:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [Win32, x64]
+        config: [Debug, Release]
+
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          path: plugin
+
+      - name: Check out open-debugger (host)
+        uses: actions/checkout@v4
+        with:
+          repository: nikolas-chambers/open-debugger
+          path: open-debugger
+
+      - name: Check out host submodules (private ones auto-skip)
+        working-directory: open-debugger
+        run: git submodule update --init --recursive
+
+      - name: Build the host (odbg.lib)
+        working-directory: open-debugger
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }}
+          cmake --build build --config ${{ matrix.config }} --target odbg --parallel
+
+      - name: Build the plugin(s)
+        working-directory: plugin
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A ${{ matrix.arch }} -DODBG_ROOT="${{ github.workspace }}/open-debugger"
+          cmake --build build --config ${{ matrix.config }} --parallel
+
+      - name: Stage artifacts
+        shell: pwsh
+        run: |
+          $repo = "${{ github.event.repository.name }}"
+          $name = "$repo-$env:VERSION-${{ matrix.arch }}-${{ matrix.config }}"
+          $plugins = "open-debugger/build/${{ matrix.config }}/plugins"
+          New-Item -ItemType Directory -Force $name | Out-Null
+          Copy-Item "$plugins/*.dll" $name
+          "STAGE=$name" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.STAGE }}
+          path: ${{ env.STAGE }}
+
+      - name: Zip for release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: Compress-Archive -Path "$env:STAGE/*" -DestinationPath "$env:STAGE.zip"
+
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.STAGE }}.zip

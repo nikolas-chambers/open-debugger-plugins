@@ -2,3 +2,9 @@ build/
 out/
 .vs/
 *.user
+
+# logs and crash dumps
+*.log
+*.dmp
+dumps/
+logs/
