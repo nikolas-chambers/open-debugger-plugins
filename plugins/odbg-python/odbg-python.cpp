@@ -350,6 +350,10 @@ extern "C" __declspec(dllexport) int Odbg_Plugininit(int hostVersion) {
         }
     }
 
+    Odbg_RegisterCommand("py <code>",
+        "Run Python from the command bar / pipe (the odbg SDK is in scope)");
+    Odbg_RegisterCommand("pyrun <name>",
+        "Run a one-shot script from the scripts/ folder by name");
     Odbg_RegisterCommand("python: reload scripts",
         "Re-load every plugin .py from the pyplugins/ folder next to odbg-python.dll");
     char buf[128];
@@ -409,6 +413,24 @@ extern "C" __declspec(dllexport) void Odbg_Paused(int reason, const OdbgRegs* re
     Py_DECREF(t);
     if (!r) PyErr_Print();
     else Py_DECREF(r);
+}
+
+// Handle a command the host did not recognize. Routes to the manager's
+// handle_command(cmdline), which owns "py <code>" (run Python with the odbg SDK
+// in scope) and "pyrun <name>" (run a scripts/ file). Returns 1 (with the reply
+// in `out`) if we claimed it, 0 to let the host try the next plugin.
+extern "C" __declspec(dllexport) int Odbg_Plugincommand(const char* cmdline, char* out, int outSize) {
+    if (!g_manager || !cmdline) return 0;
+    Gil gil;
+    PyObject* r = PyObject_CallMethod(g_manager, "handle_command", "s", cmdline);
+    if (!r) { PyErr_Print(); return 0; }
+    if (r == Py_None) { Py_DECREF(r); return 0; }   // not one of ours
+    const char* s = PyUnicode_AsUTF8(r);
+    if (s && out && outSize > 0) {
+        strncpy_s(out, outSize, s, _TRUNCATE);
+    }
+    Py_DECREF(r);
+    return 1;
 }
 
 extern "C" __declspec(dllexport) void Odbg_Pluginclose(void) {

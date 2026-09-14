@@ -28,12 +28,18 @@ is logged and loading continues.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import os
 import sys
 import traceback
 
 import odbg as sdk
+
+# Persistent namespace for the "py" command, so state survives between lines
+# (define a helper on one line, call it on the next). `odbg` is the SDK.
+_py_ns = {"odbg": sdk, "__name__": "__odbg_py__"}
 
 
 class _PyPlugin:
@@ -216,6 +222,59 @@ def close():
                 _log_error(plug.name, "close", exc)
     _plugins.clear()
     _menu_map.clear()
+
+
+def handle_command(cmdline):
+    """Handle a command the host did not recognize. Owns 'py <code>' (run Python
+    with the odbg SDK in scope, returning printed output / the expression repr)
+    and 'pyrun <name>' (run a scripts/ file by name). Returns the reply string
+    if claimed, or None to let the host try the next plugin / report unknown."""
+    s = (cmdline or "").strip()
+    if not s:
+        return None
+    parts = s.split(None, 1)
+    verb = parts[0].lower()
+    arg = parts[1] if len(parts) > 1 else ""
+    if verb == "py":
+        return _run_py(arg)
+    if verb == "pyrun":
+        return _run_named_script(arg)
+    return None
+
+
+def _run_py(code):
+    """Exec/eval one line of Python in the persistent namespace, capturing
+    stdout. Tries eval first (so ``py 1+1`` echoes ``2``); falls back to exec
+    for statements (``py x = read_u32(...)``)."""
+    if not code.strip():
+        return "usage: py <python code>   (odbg SDK in scope, e.g. py hex(odbg.get_reg('rip')))"
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            try:
+                result = eval(compile(code, "<py>", "eval"), _py_ns)
+                if result is not None:
+                    print(repr(result))
+            except SyntaxError:
+                exec(compile(code, "<py>", "exec"), _py_ns)
+    except Exception:
+        line = traceback.format_exc().strip().splitlines()[-1]
+        return "py error: " + line
+    out = buf.getvalue().rstrip("\n")
+    return out if out else "ok"
+
+
+def _run_named_script(name):
+    """Run a scripts/ file by name (with or without .py), like the menu item."""
+    name = name.strip()
+    if not name:
+        return "usage: pyrun <script name>"
+    stem = name[:-3] if name.endswith(".py") else name
+    for sname, spath in _scripts:
+        if sname == stem:
+            _run_script(spath, sname)
+            return "ran script %r" % sname
+    return "no such script: %s (in scripts/)" % stem
 
 
 def reload():
