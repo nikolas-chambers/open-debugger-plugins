@@ -110,6 +110,14 @@ def _load_one(stem, path):
     sys.modules[stem] = mod
     spec.loader.exec_module(mod)
 
+    # A .py with no plugin interface is a shared helper module (e.g. pe_utils),
+    # not a plugin: importing it here (done above) makes it available for other
+    # plugins to `import`, but it must not be registered as a plugin. Recognise a
+    # real plugin by an explicit NAME or any lifecycle function.
+    _iface = ("plugininit", "pluginmenu", "pluginaction", "paused", "pluginclose")
+    if not hasattr(mod, "NAME") and not any(hasattr(mod, fn) for fn in _iface):
+        return None
+
     name = getattr(mod, "NAME", None) or stem
     abi = getattr(mod, "plugindata", lambda: sdk.ABI_VERSION)()
     if abi != sdk.ABI_VERSION:
