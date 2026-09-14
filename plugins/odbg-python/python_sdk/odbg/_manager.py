@@ -52,6 +52,7 @@ class _PyPlugin:
         self.close_fn = close_fn
         self.init_fn = init_fn
         self.items = []
+        self.enabled = True   # toggled from the Plugins window / pyon-pyoff
 
 
 _plugins: list[_PyPlugin] = []
@@ -143,15 +144,24 @@ def menu():
     global _menu_map
     _menu_map = []
     labels = []
+    # Enabled plugins contribute their own menu items.
     for i, plug in enumerate(_plugins):
+        if not plug.enabled:
+            continue
         items = list(plug.menu_fn()) if plug.menu_fn else []
         plug.items = items
         for j, label in enumerate(items):
             labels.append(label[:31])  # host item strings are 32 bytes
             _menu_map.append(("plugin", i, j))
+    # One-shot scripts.
     for sname, spath in _scripts:
         labels.append(("Run: %s" % sname)[:31])
         _menu_map.append(("script", sname, spath))
+    # Per-plugin enable/disable toggles (the script-manager controls).
+    for i, plug in enumerate(_plugins):
+        mark = "on" if plug.enabled else "off"
+        labels.append(("[%s] %s" % (mark, plug.name))[:31])
+        _menu_map.append(("toggle", i))
     if _plugins or _scripts:
         labels.append("Reload scripts")
         _menu_map.append(("reload", None))
@@ -173,6 +183,11 @@ def invoke(action):
         elif entry[0] == "script":
             _, name, path = entry
             _run_script(path, name)
+        elif entry[0] == "toggle":
+            _, i = entry
+            _plugins[i].enabled = not _plugins[i].enabled
+            sdk.log("[python] %s %s" % (_plugins[i].name,
+                    "enabled" if _plugins[i].enabled else "disabled"))
         elif entry[0] == "reload":
             reload()
     except Exception as exc:
@@ -204,7 +219,7 @@ def paused(reason, regs_tuple):
     """Fan out a host stop event to every plugin's `paused` callback."""
     regs = sdk.Regs(*regs_tuple)
     for plug in list(_plugins):
-        if not plug.paused_fn:
+        if not plug.enabled or not plug.paused_fn:
             continue
         try:
             plug.paused_fn(reason, regs)
@@ -239,7 +254,26 @@ def handle_command(cmdline):
         return _run_py(arg)
     if verb == "pyrun":
         return _run_named_script(arg)
+    if verb == "pyplugins":
+        return _list_pyplugins()
+    if verb in ("pyon", "pyoff"):
+        return _toggle_plugin(arg, verb == "pyon")
     return None
+
+
+def _list_pyplugins():
+    rows = ["%-4s %s" % ("[on]" if p.enabled else "[off]", p.name) for p in _plugins]
+    rows += ["[run] %s" % s for s, _ in _scripts]
+    return "\n".join(rows) if rows else "(no python plugins or scripts)"
+
+
+def _toggle_plugin(name, want_on):
+    name = name.strip()
+    for p in _plugins:
+        if p.name.lower() == name.lower():
+            p.enabled = want_on
+            return "%s %s" % (p.name, "enabled" if want_on else "disabled")
+    return "no such plugin: %s" % name
 
 
 def _run_py(code):

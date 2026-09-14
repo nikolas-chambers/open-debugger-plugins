@@ -354,6 +354,10 @@ extern "C" __declspec(dllexport) int Odbg_Plugininit(int hostVersion) {
         "Run Python from the command bar / pipe (the odbg SDK is in scope)");
     Odbg_RegisterCommand("pyrun <name>",
         "Run a one-shot script from the scripts/ folder by name");
+    Odbg_RegisterCommand("pyplugins",
+        "List Python plugins and scripts with their on/off state");
+    Odbg_RegisterCommand("pyon <name> / pyoff <name>",
+        "Enable or disable a Python plugin");
     Odbg_RegisterCommand("python: reload scripts",
         "Re-load every plugin .py from the pyplugins/ folder next to odbg-python.dll");
     char buf[128];
