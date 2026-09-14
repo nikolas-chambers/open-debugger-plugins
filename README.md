@@ -6,12 +6,16 @@ General-purpose plugins for [open-debugger](https://github.com/nikolas-chambers/
 | plugin | what it does |
 |--------|--------------|
 | `odbg-anti_anti` | clears the usual anti-debug tells on every pause: `PEB.BeingDebugged` and the heap debug bits in `NtGlobalFlag` |
+| `odbg-python` | embeds a CPython interpreter and runs **Python plugins** from a `pyplugins/` drop-folder (long-lived: menu/paused/settings) and one-shot **scripts** from `scripts/` (a `main(odbg)` run on demand). Ships the full `Odbg_*` SDK to Python (`odbg.command()`, memory, registers, breakpoints) plus reference plugins: `complete_plugin.py` (full SDK demo), `apilog.py` (API-call logger), `scan.py` (CE/ClawSearch-style memory scanner), `snapshot.py` (one-shot script). See `plugins/odbg-python/README.md`. |
 
 ## Building
 
 The debugger itself carries this repo as a submodule, so the simplest path is
 to build [open-debugger](https://github.com/nikolas-chambers/open-debugger) —
-one configure builds the debugger and every plugin.
+one configure builds the debugger and every plugin. `odbg-python` additionally
+needs a CPython development package (the `Development.Embed` component); if it
+is not found the plugin is skipped with a warning, so SDK-only builds still
+work.
 
 To build this repo on its own, against an already-built debugger next door:
 

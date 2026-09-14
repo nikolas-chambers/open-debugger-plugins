@@ -2,6 +2,8 @@ build/
 out/
 .vs/
 *.user
+__pycache__/
+*.pyc
 
 # logs and crash dumps
 *.log
