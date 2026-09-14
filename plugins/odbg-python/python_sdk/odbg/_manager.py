@@ -58,6 +58,13 @@ class _PyPlugin:
 _plugins: list[_PyPlugin] = []
 _scripts: list = []   # [(label, path)] one-shot scripts from the scripts/ folder
 _menu_map: list = []  # parallel to menu labels: an (entry,...) tuple per item
+_verbs: dict = {}     # command-bar / pipe verbs a plugin registered -> handler
+
+
+def register_verb(name, fn):
+    """A plugin registers `name` as a command-bar / pipe verb; fn(args) gets the
+    rest of the line and returns a reply string. Wired via odbg.register_verb."""
+    _verbs[name.strip().lower()] = fn
 
 # Last directories seen, so reload() can re-discover without asking again.
 _last_dirs = (None, None)
@@ -78,6 +85,7 @@ def discover(plugdir, scriptsdir):
     _last_dirs = (plugdir, scriptsdir)
     _plugins = []
     _scripts = []
+    _verbs.clear()   # plugins re-register their verbs from plugininit
     if not plugdir or not os.path.isdir(plugdir):
         return 0
     for fname in sorted(os.listdir(plugdir)):
@@ -258,6 +266,13 @@ def handle_command(cmdline):
     parts = s.split(None, 1)
     verb = parts[0].lower()
     arg = parts[1] if len(parts) > 1 else ""
+    # Plugin-registered verbs first (odbg.register_verb), then the built-ins.
+    if verb in _verbs:
+        try:
+            return _verbs[verb](arg)
+        except Exception:
+            line = traceback.format_exc().strip().splitlines()[-1]
+            return "%s error: %s" % (verb, line)
     if verb == "py":
         return _run_py(arg)
     if verb == "pyrun":

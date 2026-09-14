@@ -81,6 +81,15 @@ def register_command(name: str, help_: str) -> None:
     _mod().register_command(str(name), str(help_))
 
 
+def register_verb(name: str, handler) -> None:
+    """Register a command-bar / pipe verb this plugin handles. ``handler(args)``
+    receives the rest of the command line and returns a reply string. Call from
+    ``plugininit``; also document it with ``register_command`` for the help
+    window. This is how a Python plugin adds its own verbs (e.g. ``emu``)."""
+    from . import _manager
+    _manager.register_verb(str(name), handler)
+
+
 def set_setting(key: str, value: str) -> None:
     """Persist one plugin setting (namespaced per plugin by the host)."""
     _mod().set_setting(str(key), str(value))
@@ -162,18 +171,21 @@ def read_cstr(addr: int, maxlen: int = 2048) -> str:
 
 
 def read_ustr(addr: int, maxlen: int = 1024) -> str:
-    """Read a UTF-16LE NUL-terminated string from the debuggee."""
+    """Read a UTF-16LE NUL-terminated string from the debuggee (`maxlen` is a
+    count of UTF-16 code units)."""
     raw = bytearray()
-    while len(raw) < maxlen:
+    limit = maxlen * 2
+    while len(raw) < limit:
         chunk = read_memory(addr + len(raw), 64)
         if not chunk:
             break
-        end = chunk.find(b"\0\0")
-        if end >= 0:
-            raw += chunk[:end]
-            break
         raw += chunk
-    return raw.decode("utf-16-le", "replace")
+        # The terminator is a UTF-16 NUL (00 00) on an EVEN boundary; a naive
+        # find(b"\0\0") can land between two code units and split a character.
+        for i in range(0, len(raw) - 1, 2):
+            if raw[i] == 0 and raw[i + 1] == 0:
+                return raw[:i].decode("utf-16-le", "replace")
+    return raw[:limit].decode("utf-16-le", "replace")
 
 
 # ---------------------------------------------------------------------------

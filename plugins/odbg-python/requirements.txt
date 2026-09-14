@@ -1,0 +1,5 @@
+# Optional Python packages that light up specific odbg-python plugins.
+# Install into the interpreter odbg-python embeds (the one CMake built against):
+#   python -m pip install -r requirements.txt
+unicorn     # emulate.py  - Unicorn CPU emulator ("emu" command)
+capstone    # disasm_utils - structured disassembly for plugins
